@@ -5,17 +5,15 @@ on:
   push:
     branches:
       - main
-      - "copilot/**"
     paths:
       - ".github/workflows/create-dak-issues.yml"
-
-permissions:
-  issues: write
-  contents: read
 
 jobs:
   create-issues:
     runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      contents: read
     # Only run once — check if issues already exist before creating
     steps:
       - name: Check if issues already created
