@@ -1,0 +1,822 @@
+name: Create DAK Update Issues
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - "copilot/**"
+    paths:
+      - ".github/workflows/create-dak-issues.yml"
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  create-issues:
+    runs-on: ubuntu-latest
+    # Only run once — check if issues already exist before creating
+    steps:
+      - name: Check if issues already created
+        id: check
+        run: |
+          COUNT=$(gh issue list --repo ${{ github.repository }} --label "dak-update" --json number --jq length)
+          echo "existing_count=$COUNT" >> $GITHUB_OUTPUT
+          echo "Existing dak-update issues: $COUNT"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create DAK update labels
+        if: steps.check.outputs.existing_count == '0'
+        run: |
+          create_label() {
+            local name="$1"
+            local color="$2"
+            local desc="$3"
+            gh label create "$name" --color "$color" --description "$desc" --repo ${{ github.repository }} 2>/dev/null || true
+          }
+          create_label "dak-update" "0075ca" "DAK update from HIV 2025 recommendations"
+          create_label "annex-a-data-dictionary" "e4e669" "Changes to Annex A Data Dictionary (2023.27)"
+          create_label "annex-b-decision-logic" "d73a4a" "Changes to Annex B Decision Logic (2023.28)"
+          create_label "annex-c-indicators" "0e8a16" "Changes to Annex C Indicators (2023.29)"
+          create_label "testing" "f9d0c4" "HIV testing recommendations"
+          create_label "prevention" "c2e0c6" "HIV prevention recommendations"
+          create_label "prep" "bfdadc" "PrEP-related changes"
+          create_label "pmtct" "d4c5f9" "PMTCT-related changes"
+          create_label "vertical-transmission" "d4c5f9" "Vertical transmission recommendations"
+          create_label "treatment" "e99695" "HIV treatment recommendations"
+          create_label "art-regimen" "fef2c0" "ART regimen decision logic"
+          create_label "ahd" "c5def5" "Advanced HIV disease"
+          create_label "tb-hiv" "b60205" "TB/HIV co-infection"
+          create_label "tpt" "e4e669" "TB Preventive Therapy"
+          create_label "service-delivery" "0075ca" "Service delivery recommendations"
+          create_label "ncd-integration" "006b75" "NCD integration with HIV services"
+          create_label "mental-health" "5319e7" "Mental health integration"
+          create_label "kaposis-sarcoma" "b60205" "Kaposi's Sarcoma management"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Issue 1 - HIV test type for LA-PrEP RDT support
+        if: steps.check.outputs.existing_count == '0'
+        run: |
+          gh issue create \
+            --repo ${{ github.repository }} \
+            --title "[DAK Update] Add HIV test type data element for LA-PrEP RDT support (HIV.TST.2025.001.01)" \
+            --label "dak-update,annex-a-data-dictionary,annex-b-decision-logic,testing,prep" \
+            --assignee "copilot" \
+            --body "## Summary
+          Rapid diagnostic tests (RDTs) may be used for HIV testing for initiation, continuation and discontinuation of long-acting injectable PrEP (HIV.TST.2025.001.01). This requires new and updated data elements in the Data Dictionary (Annex A) and updated decision logic in Annex B.
+
+          ## Source Recommendation
+          - **Recommendation ID:** HIV.TST.2025.001.01
+          - **Type:** New
+          - **Topic Area:** Testing
+          - **Text:** *Rapid diagnostic tests may be used for HIV testing for initiation, continuation and discontinuation of long acting injectable long-acting PrEP.*
+
+          ## Change Details
+
+          ### File: \`WHO-UCN-HHS-SIA-2023.27-eng.xlsx\` — Annex A (Data Dictionary)
+
+          #### Sheet: \`HIV.B HTS visit\` — ADD new data element
+
+          | Column | New Value |
+          |--------|-----------|
+          | Data Element Label | HIV test type |
+          | Description and Definition | The type of HIV test used during the HIV testing encounter |
+          | Multiple Choice Type | Select one |
+          | Data Type | Coding |
+          | Input Options | Rapid diagnostic test (RDT); Laboratory assay; Self-test (reported) |
+          | Required | C (Required if HIV test conducted = True) |
+          | Linkages | HIV.C7.DT, HIV.C23.DT, HTS.2/HTS.3 indicators |
+
+          #### Sheet: \`HIV.B HTS visit\` — MODIFY existing data element linkages
+
+          Existing elements **HIV test result**, **HIV test date**, **Date HIV test results returned** — add linkages to **HIV.C (PrEP) activities** so these fields are consumable at LA-PrEP dosing encounters.
+
+          ### File: \`WHO-UCN-HHS-SIA-2023.28-eng.xlsx\` — Annex B (Decision Logic & Schedules)
+
+          #### Sheet: \`HIV.C7.DT PrEP Suitability\` — MODIFY
+
+          Add input expressions: \`HIV test type\`, \`HIV test result\`
+
+          Add rule:
+          > IF \`HIV test type = RDT\` AND \`HIV test result = Negative\` AND risk criteria met → **Output:** Recommend PrEP; RDT result acceptable for LA-PrEP initiation/continuation/discontinuation
+
+          Add guidance: *Rapid diagnostic test (RDT) result is acceptable for initiation, continuation and discontinuation of long-acting injectable PrEP.*
+
+          #### Sheet: \`HIV.S.1 Recommended Services\` — ADD schedule row
+
+          - **Item:** HIV test prior to LA-PrEP injection
+          - **Trigger:** PrEP injection due; Condition: PrEP product = long-acting injectable
+          - **Due date:** Same day as dosing
+          - **Completion:** Valid negative RDT recorded
+
+          ## Implementation Instructions
+
+          1. In \`WHO-UCN-HHS-SIA-2023.27-eng.xlsx\`, sheet \`HIV.B HTS visit\`, insert new data element row for *HIV test type* after existing HTS test fields (Coding, select one, options: RDT; Laboratory assay; Self-test; Required if HIV test conducted = True; Linkages: HIV.C7.DT, HIV.C23.DT).
+          2. In the same sheet, find rows for *HIV test result*, *HIV test date*, *Date HIV test results returned* and add linkages to PrEP activities (HIV.C) in the Linkages column.
+          3. In \`WHO-UCN-HHS-SIA-2023.28-eng.xlsx\`, sheet \`HIV.C7.DT PrEP Suitability\`, add *HIV test type* and *HIV test result* as new input expressions and add the RDT acceptance rule.
+          4. In \`WHO-UCN-HHS-SIA-2023.28-eng.xlsx\`, sheet \`HIV.S.1 Recommended Services\`, add a new schedule row for HIV testing prior to LA-PrEP injection.
+
+          ## Rationale
+          New evidence supported development of this recommendation. Allows RDT use at LA-PrEP dosing encounters, enabling more accessible LA-PrEP services.
+
+          ---
+          _This issue was auto-generated by the DAK GitHub Updater skill._" 2>/dev/null || \
+          gh issue create \
+            --repo ${{ github.repository }} \
+            --title "[DAK Update] Add HIV test type data element for LA-PrEP RDT support (HIV.TST.2025.001.01)" \
+            --label "dak-update,annex-a-data-dictionary,annex-b-decision-logic,testing,prep" \
+            --body "## Summary
+          Rapid diagnostic tests (RDTs) may be used for HIV testing for initiation, continuation and discontinuation of long-acting injectable PrEP (HIV.TST.2025.001.01).
+
+          ## Source Recommendation
+          - **Recommendation ID:** HIV.TST.2025.001.01 | **Type:** New | **Topic Area:** Testing
+          - **Text:** *Rapid diagnostic tests may be used for HIV testing for initiation, continuation and discontinuation of long acting injectable PrEP.*
+
+          ## Changes Required
+
+          ### \`WHO-UCN-HHS-SIA-2023.27-eng.xlsx\` — Sheet: \`HIV.B HTS visit\`
+          - **ADD** new data element row: Label=*HIV test type*, Type=Coding (select one), Options=RDT; Laboratory assay; Self-test, Required if HIV test conducted=True, Linkages=HIV.C7.DT/HIV.C23.DT
+          - **MODIFY** linkages for *HIV test result*, *HIV test date*, *Date HIV test results returned* → add HIV.C (PrEP) activity linkages
+
+          ### \`WHO-UCN-HHS-SIA-2023.28-eng.xlsx\` — Sheet: \`HIV.C7.DT PrEP Suitability\`
+          - **ADD** input expressions: HIV test type, HIV test result
+          - **ADD** rule: IF HIV test type=RDT AND HIV test result=Negative AND risk criteria met → Recommend PrEP (RDT acceptable for LA-PrEP)
+
+          ### \`WHO-UCN-HHS-SIA-2023.28-eng.xlsx\` — Sheet: \`HIV.S.1 Recommended Services\`
+          - **ADD** schedule row: HIV test prior to LA-PrEP injection (trigger=injection due; condition=LA-PrEP product; completion=negative RDT documented)
+
+          ## Rationale
+          New 2025 recommendation. Allows RDT use at LA-PrEP dosing encounters for more accessible care.
+
+          ---
+          _This issue was auto-generated by the DAK GitHub Updater skill._
+
+          @copilot — please implement this change and open a pull request."
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Issue 2 - Lenacapavir LA as PrEP option
+        if: steps.check.outputs.existing_count == '0'
+        run: |
+          gh issue create \
+            --repo ${{ github.repository }} \
+            --title "[DAK Update] Add long-acting injectable lenacapavir as PrEP option (HIV.PRV.2025.001.01)" \
+            --label "dak-update,annex-a-data-dictionary,annex-b-decision-logic,annex-c-indicators,prevention,prep" \
+            --assignee "copilot" \
+            --body "## Summary
+          Long-acting injectable lenacapavir should be offered as an additional prevention choice for people at risk of HIV (HIV.PRV.2025.001.01). Updates required across all three Annexes.
+
+          ## Source Recommendation
+          - **Recommendation ID:** HIV.PRV.2025.001.01 | **Type:** New | **Topic Area:** Prevention
+          - **Text:** *Long-acting injectable lenacapavir should be offered as an additional prevention choice for people at risk of HIV, as part of combination prevention approaches.*
+
+          ## Changes Required
+
+          ### \`WHO-UCN-HHS-SIA-2023.27-eng.xlsx\` — Sheet: \`HIV.C PrEP visit\`
+          - **MODIFY** *PrEP product prescribed*: add option value *Lenacapavir (long-acting injectable)*
+          - **MODIFY** *Medications prescribed*: add *Lenacapavir (LA)*
+          - **ADD** *PrEP administration route* (Coding, select one: Oral; Injectable)
+          - **ADD** *PrEP injection date* (DateTime)
+          - **UPDATE** linkages: PrEP product prescribed → HIV.C7.DT, HIV.C23.DT
+
+          ### \`WHO-UCN-HHS-SIA-2023.28-eng.xlsx\` — Sheet: \`HIV.C7.DT PrEP Suitability\`
+          - **ADD** rule: IF HIV test result=Negative AND risk criteria met AND lenacapavir available → Recommend PrEP including lenacapavir LA option
+
+          ### \`WHO-UCN-HHS-SIA-2023.28-eng.xlsx\` — Sheet: \`HIV.C23.DT PEP or PrEP Regimen\`
+          - **ADD** output rows recommending lenacapavir (LA) where eligible, with scheduling hint for injection visits
+
+          ### \`WHO-UCN-HHS-SIA-2023.28-eng.xlsx\` — Sheet: \`HIV.S.1 Recommended Services\`
+          - **ADD** schedule rows for lenacapavir injection visit cadence/reminders
+
+          ### \`WHO-UCN-HHS-SIA-2023.29-eng.xlsx\` — Sheet: \`Indicator definitions\`
+          - **MODIFY** HIV.IND.2/.3/.4: add *Lenacapavir (long-acting injectable)* to PrEP product & formulation disaggregation values
+          - **MODIFY** HIV.IND.4 Method of measurement: add person-time of protection conversion for lenacapavir dosing cycle
+
+          ## Rationale
+          New 2025 recommendation. Lenacapavir is a novel LA injectable with demonstrated HIV prevention efficacy; adding it expands PrEP prevention choices.
+
+          ---
+          _This issue was auto-generated by the DAK GitHub Updater skill._
+
+          @copilot — please implement this change and open a pull request." 2>/dev/null || echo "Issue 2 creation attempted"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Issue 3 - Enhanced breastfeeding support
+        if: steps.check.outputs.existing_count == '0'
+        run: |
+          gh issue create \
+            --repo ${{ github.repository }} \
+            --title "[DAK Update] Add enhanced breastfeeding support data elements and schedules (HIV.VER.2025.002.02)" \
+            --label "dak-update,annex-a-data-dictionary,annex-b-decision-logic,pmtct,vertical-transmission" \
+            --assignee "copilot" \
+            --body "## Summary
+          Enhanced community and facility-based interventions should be offered to support mothers living with HIV who are breastfeeding (HIV.VER.2025.002.02).
+
+          ## Source Recommendation
+          - **Recommendation ID:** HIV.VER.2025.002.02 | **Type:** Updated | **Topic Area:** Vertical Transmission
+          - **Text:** *Offer enhanced community and facility-based interventions to support mothers living with HIV who are breastfeeding, to optimize their ART adherence and to maintain viral suppression.*
+
+          ## Changes Required
+
+          ### \`WHO-UCN-HHS-SIA-2023.27-eng.xlsx\` — Sheet: \`HIV.E-F PMTCT\`
+          - **ADD** *Enhanced BF support provided* (Coding multi-select: Counselling; Peer support; Adherence plan; Home visit scheduled; Facility-based support)
+          - **ADD** *Mother-infant pair retained in care* (Boolean)
+          - **ADD** *BF support visit date* (Date)
+
+          ### \`WHO-UCN-HHS-SIA-2023.28-eng.xlsx\` — Sheet: \`HIV.S.1 Recommended Services\`
+          - **ADD** schedule rows for PMTCT BF follow-up contacts:
+            - Post-natal BF support visit 1 (Delivery + 2 weeks): Counselling + peer support
+            - Post-natal BF support visit 2 (Delivery + 6 weeks): ART adherence review
+            - Ongoing BF support (monthly while breastfeeding): Adherence plan review + VL check
+
+          ## Rationale
+          Updated 2025 to ensure viral suppression in breastfeeding WLHIV, reducing vertical transmission risk.
+
+          ---
+          _This issue was auto-generated by the DAK GitHub Updater skill._
+
+          @copilot — please implement this change and open a pull request." 2>/dev/null || echo "Issue 3 creation attempted"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Issue 4 - Infant prophylaxis not-high-risk NVP 6 weeks
+        if: steps.check.outputs.existing_count == '0'
+        run: |
+          gh issue create \
+            --repo ${{ github.repository }} \
+            --title "[DAK Update] Infant prophylaxis not-high-risk: 6-week single-drug NVP preferred (HIV.VER.2025.003.02)" \
+            --label "dak-update,annex-a-data-dictionary,annex-b-decision-logic,pmtct,vertical-transmission" \
+            --assignee "copilot" \
+            --body "## Summary
+          Infants not at high risk of acquiring HIV should receive 6 weeks of single-drug NVP prophylaxis (HIV.VER.2025.003.02).
+
+          ## Source Recommendation
+          - **Recommendation ID:** HIV.VER.2025.003.02 | **Type:** Updated | **Topic Area:** Vertical Transmission
+          - **Text:** *Infants who are not at high risk of acquiring HIV should receive six weeks of infant prophylaxis with a single drug, with nevirapine (NVP) as the preferred drug.*
+
+          ## Changes Required
+
+          ### \`WHO-UCN-HHS-SIA-2023.27-eng.xlsx\` — Sheet: \`HIV.E-F PMTCT\`
+          - **ADD** *Infant risk classification* (Coding select one: High risk; Not high risk)
+          - **ADD** *Infant prophylaxis regimen* (Coding select one: NVP single-drug (6 weeks); ABC+3TC+DTG (3-drug); Other)
+          - **ADD** *Prophylaxis start date* (Date)
+          - **ADD** *Planned prophylaxis duration* (Duration — e.g., 6 weeks)
+
+          ### \`WHO-UCN-HHS-SIA-2023.28-eng.xlsx\` — PMTCT infant management decision sheet
+          - **ADD** rule: IF Infant risk classification=Not high risk → MedicationRequest: NVP single-drug × 6 weeks
+          - **ADD** guidance: *Administer NVP as preferred single-drug prophylaxis for 6 weeks in not-high-risk infants*
+
+          ## Rationale
+          Updated 2025 to define preferred single-drug prophylaxis regimen for not-high-risk infants.
+
+          ---
+          _This issue was auto-generated by the DAK GitHub Updater skill._
+
+          @copilot — please implement this change and open a pull request." 2>/dev/null || echo "Issue 4 creation attempted"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Issue 5 - Infant prophylaxis high-risk 3-drug ABC+3TC+DTG
+        if: steps.check.outputs.existing_count == '0'
+        run: |
+          gh issue create \
+            --repo ${{ github.repository }} \
+            --title "[DAK Update] Infant prophylaxis high-risk: 3-drug ABC+3TC+DTG preferred (HIV.VER.2025.004.02)" \
+            --label "dak-update,annex-a-data-dictionary,annex-b-decision-logic,pmtct,vertical-transmission" \
+            --assignee "copilot" \
+            --body "## Summary
+          Infants at high risk of acquiring HIV should receive a 3-drug regimen with ABC+3TC+DTG as preferred drugs (HIV.VER.2025.004.02).
+
+          ## Source Recommendation
+          - **Recommendation ID:** HIV.VER.2025.004.02 | **Type:** Updated | **Topic Area:** Vertical Transmission
+          - **Text:** *Infants who are at high risk of acquiring HIV should receive a three-drug regimen, with ABC, 3TC and DTG as the preferred drugs.*
+
+          ## Changes Required
+
+          ### \`WHO-UCN-HHS-SIA-2023.27-eng.xlsx\` — Sheet: \`HIV.E-F PMTCT\`
+          - **CONFIRM/ADD** *Infant prophylaxis regimen* includes option: *ABC+3TC+DTG (3-drug)* (see HIV.VER.2025.003.02 issue)
+          - **ADD** *Infant weight (kg)* (Quantity) — for weight-based dosing
+          - **ADD** *Infant prophylaxis weight band* (Coding select one) — per WHO dosing tables
+
+          ### \`WHO-UCN-HHS-SIA-2023.28-eng.xlsx\` — PMTCT infant management decision sheet
+          - **ADD** rule: IF Infant risk classification=High risk → MedicationRequest: ABC+3TC+DTG (3-drug prophylaxis)
+          - **Hit policy:** R (Rule order) — high-risk rule takes priority
+          - **ADD** guidance: *3-drug prophylaxis (ABC+3TC+DTG) at weight-based dosing; consider step-down to NVP per HIV.VER.2025.005.02*
+
+          ## Rationale
+          Updated 2025. High-risk infants require intensive 3-drug prophylaxis for maximum HIV acquisition protection.
+
+          ---
+          _This issue was auto-generated by the DAK GitHub Updater skill._
+
+          @copilot — please implement this change and open a pull request." 2>/dev/null || echo "Issue 5 creation attempted"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Issue 6 - Step-down prophylaxis during breastfeeding
+        if: steps.check.outputs.existing_count == '0'
+        run: |
+          gh issue create \
+            --repo ${{ github.repository }} \
+            --title "[DAK Update] Add step-down prophylaxis logic: NVP continuation during breastfeeding (HIV.VER.2025.005.02)" \
+            --label "dak-update,annex-a-data-dictionary,annex-b-decision-logic,pmtct,vertical-transmission" \
+            --assignee "copilot" \
+            --body "## Summary
+          Breastfeeding infants who complete 6-week 3-drug regimen should continue single-drug NVP until BF ends or maternal viral suppression confirmed (HIV.VER.2025.005.02).
+
+          ## Source Recommendation
+          - **Recommendation ID:** HIV.VER.2025.005.02 | **Type:** Updated | **Topic Area:** Vertical Transmission
+          - **Text:** *Breastfeeding infants who complete six weeks of a three-drug regimen should follow with single drug prophylaxis for the duration of the breastfeeding period or until confirmed maternal viral suppression.*
+
+          ## Changes Required
+
+          ### \`WHO-UCN-HHS-SIA-2023.27-eng.xlsx\` — Sheet: \`HIV.E-F PMTCT\`
+          - **ADD** *Maternal viral suppression status* (Boolean: True=virally suppressed)
+          - **ADD** *Date maternal suppression achieved* (Date)
+          - **ADD** *3-drug prophylaxis completed* (Boolean: True=completed 6-week 3-drug course)
+          - **CONFIRM/ADD** *Breastfeeding status* (Coding: Currently breastfeeding; Stopped; Never breastfed)
+
+          ### \`WHO-UCN-HHS-SIA-2023.28-eng.xlsx\` — PMTCT infant management decision sheet
+          - **ADD** rule: IF 3-drug prophylaxis completed=True AND Breastfeeding=True AND Maternal suppression≠True → Continue NVP single-drug
+          - **Stop condition:** Breastfeeding stops OR Maternal suppression confirmed
+          - **ADD** guidance: *Continue NVP single-drug after 3-drug course, for BF duration or until maternal suppression*
+
+          ### \`WHO-UCN-HHS-SIA-2023.28-eng.xlsx\` — Sheet: \`HIV.S.2 Monitoring ART response\`
+          - **ADD** schedule row: Maternal VL check during breastfeeding (trigger=post-partum while BF=True; frequency=6-monthly; action=VL test; completion=result documented + update suppression status)
+
+          ## Rationale
+          Updated 2025 to encode step-down prophylaxis logic preventing infant HIV acquisition during extended breastfeeding period.
+
+          ---
+          _This issue was auto-generated by the DAK GitHub Updater skill._
+
+          @copilot — please implement this change and open a pull request." 2>/dev/null || echo "Issue 6 creation attempted"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Issue 7 - DRV/r preferred PI, ATV/r and LPV/r alternatives
+        if: steps.check.outputs.existing_count == '0'
+        run: |
+          gh issue create \
+            --repo ${{ github.repository }} \
+            --title "[DAK Update] ART regimen: DRV/r preferred PI, ATV/r or LPV/r alternatives (HIV.TRT.2025.001.02 & .002.02)" \
+            --label "dak-update,annex-a-data-dictionary,annex-b-decision-logic,treatment,art-regimen" \
+            --assignee "copilot" \
+            --body "## Summary
+          DRV/r is the preferred boosted PI; ATV/r or LPV/r are alternatives (HIV.TRT.2025.001.02 and HIV.TRT.2025.002.02).
+
+          ## Source Recommendations
+          - **HIV.TRT.2025.001.02** (Updated): *Darunavir/ritonavir is the preferred boosted protease inhibitor option for antiretroviral treatment, if a protease inhibitor is required.*
+          - **HIV.TRT.2025.002.02** (Updated): *Atazanavir/ritonavir or lopinavir/ritonavir can be used as an alternative boosted protease inhibitor option for antiretroviral treatment.*
+
+          ## Changes Required
+
+          ### \`WHO-UCN-HHS-SIA-2023.27-eng.xlsx\` — Sheet: \`HIV.D Care-Treatment\`
+          - **CONFIRM/MODIFY** ART regimen and Medications prescribed data elements include DRV/r (label as *preferred boosted PI*), ATV/r (*alternative boosted PI*), LPV/r (*alternative boosted PI*)
+          - **UPDATE** descriptions/annotations to reflect preference hierarchy
+
+          ### \`WHO-UCN-HHS-SIA-2023.28-eng.xlsx\` — Sheet: \`HIV.D21.1.DT ART Regimen\`
+          - **UPDATE** PI selection rules:
+            - IF PI required → Preferred = DRV/r-based regimen
+            - IF DRV/r unavailable/contraindicated → Alternative: ATV/r or LPV/r
+          - **ADD** guidance: *DRV/r is preferred boosted PI. Use ATV/r or LPV/r only when DRV/r unavailable or contraindicated.*
+          - Ensure consistency across adult/adolescent and pediatric branches
+
+          ## Rationale
+          Updated 2025 to explicitly rank DRV/r as preferred boosted PI due to superior resistance barrier and tolerability.
+
+          ---
+          _This issue was auto-generated by the DAK GitHub Updater skill._
+
+          @copilot — please implement this change and open a pull request." 2>/dev/null || echo "Issue 7 creation attempted"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Issue 8 - NRTI backbone by weight
+        if: steps.check.outputs.existing_count == '0'
+        run: |
+          gh issue create \
+            --repo ${{ github.repository }} \
+            --title "[DAK Update] ART regimen: NRTI backbone preferences by age/weight (HIV.TRT.2025.003.02 & .004.02)" \
+            --label "dak-update,annex-a-data-dictionary,annex-b-decision-logic,treatment,art-regimen" \
+            --assignee "copilot" \
+            --body "## Summary
+          TDF/TAF+3TC/FTC preferred backbone for ≥30 kg; ABC+3TC or TAF+3TC suggested for children <30 kg on subsequent ART.
+
+          ## Source Recommendations
+          - **HIV.TRT.2025.003.02** (Updated): *Tenofovir (TDF or TAF) + 3TC (or FTC) is the preferred NRTI backbone for initial and subsequent ART in adults, adolescents and children ≥30 kg, including those with prior TDF or AZT exposure.*
+          - **HIV.TRT.2025.004.02** (Updated): *ABC+3TC or TAF + 3TC (or FTC) is the suggested NRTI backbone for subsequent ART in children <30 kg. This includes children with prior ABC or AZT exposure.*
+
+          ## Changes Required
+
+          ### \`WHO-UCN-HHS-SIA-2023.27-eng.xlsx\` — Sheet: \`HIV.D Care-Treatment\`
+          - **CONFIRM/ADD** *Weight (kg)* (Quantity) with linkage to HIV.D21.1.DT
+          - **CONFIRM/ADD** *Weight band* (Coding: <10 kg; 10-<14 kg; 14-<20 kg; 20-<25 kg; 25-<30 kg; ≥30 kg)
+          - **CONFIRM/ADD** *Prior ARV exposure* (Boolean or Coding: Prior TDF; Prior AZT; Prior ABC; None) with linkage to HIV.D21.1.DT
+
+          ### \`WHO-UCN-HHS-SIA-2023.28-eng.xlsx\` — Sheet: \`HIV.D21.1.DT ART Regimen\`
+          - **UPDATE** backbone rules:
+            - Adults/adolescents/children ≥30 kg: Preferred NRTI backbone = TDF (or TAF) + 3TC/FTC for initial AND subsequent ART (including prior TDF/AZT exposure)
+            - Children <30 kg on subsequent ART: Suggested backbone = ABC+3TC or TAF+3TC/FTC (including prior ABC/AZT exposure)
+          - **ADD** input expressions: Weight/Weight band, Prior ARV exposure, ART line (Initial/Subsequent)
+
+          ## Rationale
+          Updated 2025 with explicit weight threshold and prior-exposure guidance for backbone selection.
+
+          ---
+          _This issue was auto-generated by the DAK GitHub Updater skill._
+
+          @copilot — please implement this change and open a pull request." 2>/dev/null || echo "Issue 8 creation attempted"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Issue 9 - DTG+3TC simplification
+        if: steps.check.outputs.existing_count == '0'
+        run: |
+          gh issue create \
+            --repo ${{ github.repository }} \
+            --title "[DAK Update] Add DTG+3TC treatment simplification for suppressed adults/adolescents (HIV.TRT.2025.005.01)" \
+            --label "dak-update,annex-a-data-dictionary,annex-b-decision-logic,treatment,art-regimen" \
+            --assignee "copilot" \
+            --body "## Summary
+          DTG+3TC can be used for treatment simplification in suppressed adults/adolescents without active HBV (HIV.TRT.2025.005.01).
+
+          ## Source Recommendation
+          - **Recommendation ID:** HIV.TRT.2025.005.01 | **Type:** New | **Topic Area:** Treatment
+          - **Text:** *DTG+3TC can be used for treatment simplification in adults and adolescents with undetectable HIV viral load on 3 drug ART regimen without active hepatitis B virus (HBV) coinfection.*
+
+          ## Changes Required
+
+          ### \`WHO-UCN-HHS-SIA-2023.27-eng.xlsx\` — Sheet: \`HIV.D Care-Treatment\`
+          - **CONFIRM/ADD** *HBV infection status* (Coding: Active HBV; Inactive/resolved; Not infected; Unknown) derived from HBsAg/anti-HBc/anti-HBs; linkage to HIV.D21.1.DT
+          - **CONFIRM/ADD** *HBsAg result* (Coding: Positive; Negative; Not done)
+          - **CONFIRM/ADD** *VL suppression status* (Coding/Boolean: Undetectable; Detectable) with linkage to HIV.D21.1.DT
+
+          ### \`WHO-UCN-HHS-SIA-2023.28-eng.xlsx\` — Sheet: \`HIV.D21.1.DT ART Regimen\`
+          - **ADD** simplification rule: IF VL=Undetectable AND HBV status≠Active HBV AND Age=Adult/Adolescent AND on 3-drug ART → MedicationRequest: DTG+3TC (simplification)
+          - **ADD** guidance: *DTG+3TC recommended for simplification. Contraindicated with active HBV—confirm HBsAg negative or HBV suppressed before switching.*
+
+          ## Rationale
+          New 2025 recommendation. DTG+3TC dual therapy reduces pill burden and long-term toxicity risk in suppressed patients without active HBV.
+
+          ---
+          _This issue was auto-generated by the DAK GitHub Updater skill._
+
+          @copilot — please implement this change and open a pull request." 2>/dev/null || echo "Issue 9 creation attempted"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Issue 10 - LA CAB+RPV switch option
+        if: steps.check.outputs.existing_count == '0'
+        run: |
+          gh issue create \
+            --repo ${{ github.repository }} \
+            --title "[DAK Update] Add long-acting CAB+RPV as alternative ART switch option (HIV_HEP.TRT.2025.006.01)" \
+            --label "dak-update,annex-a-data-dictionary,annex-b-decision-logic,annex-c-indicators,treatment,art-regimen" \
+            --assignee "copilot" \
+            --body "## Summary
+          Long-acting injectable CAB+RPV can be used as an alternative switch option in suppressed adults/adolescents without active HBV (HIV_HEP.TRT.2025.006.01).
+
+          ## Source Recommendation
+          - **Recommendation ID:** HIV_HEP.TRT.2025.006.01 | **Type:** New | **Topic Area:** Treatment
+          - **Text:** *Long-acting injectable CAB+RPV can be used as an alternative switching option in adults and adolescents with undetectable HIV viral load on 3 drug ART regimen without active hepatitis B virus (HBV) coinfection.*
+
+          ## Changes Required
+
+          ### \`WHO-UCN-HHS-SIA-2023.27-eng.xlsx\` — Sheet: \`HIV.D Care-Treatment\`
+          - **ADD** *CAB+RPV LA prescribed* (Boolean: flag when CAB+RPV LA is current ART)
+          - **ADD** *ART administration route* (Coding: Oral; Injectable)
+          - **ADD** *CAB injection date* (DateTime)
+          - **ADD** *RPV injection date* (DateTime)
+
+          ### \`WHO-UCN-HHS-SIA-2023.28-eng.xlsx\` — Sheet: \`HIV.D21.1.DT ART Regimen\`
+          - **ADD** switch rule: IF VL=Undetectable AND HBV≠Active AND Age=Adult/Adolescent AND on 3-drug ART → MedicationRequest: CAB+RPV LA (alternative switch, where available)
+          - **ADD** guidance: *CAB+RPV LA is alternative switch where injectable therapy preferred/available. Contraindicated with active HBV. Requires oral lead-in per manufacturer guidance.*
+
+          ### \`WHO-UCN-HHS-SIA-2023.28-eng.xlsx\` — Sheet: \`HIV.S.1 Recommended Services\`
+          - **ADD** schedule rows for CAB+RPV LA injection visit cadence (initial + ongoing per approved schedule)
+
+          ### \`WHO-UCN-HHS-SIA-2023.29-eng.xlsx\` — Sheet: \`Indicator definitions\`
+          - **OPTIONAL** Add local disaggregation for *regimen category: LA CAB+RPV* under ART.1 (People on ART) for programme uptake tracking
+
+          ## Rationale
+          New 2025 recommendation. LA CAB+RPV provides fully injectable ART for patients preferring injectable therapy.
+
+          ---
+          _This issue was auto-generated by the DAK GitHub Updater skill._
+
+          @copilot — please implement this change and open a pull request." 2>/dev/null || echo "Issue 10 creation attempted"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Issue 11 - AHD identification CD4 preferred
+        if: steps.check.outputs.existing_count == '0'
+        run: |
+          gh issue create \
+            --repo ${{ github.repository }} \
+            --title "[DAK Update] AHD identification: CD4 preferred, WHO staging as fallback (HIV.TRT.2025.007.02 & .008.02)" \
+            --label "dak-update,annex-a-data-dictionary,annex-b-decision-logic,treatment,ahd" \
+            --assignee "copilot" \
+            --body "## Summary
+          CD4 is the preferred method for AHD identification; WHO clinical staging as fallback where CD4 unavailable (HIV.TRT.2025.007.02 and HIV.TRT.2025.008.02).
+
+          ## Source Recommendations
+          - **HIV.TRT.2025.007.02** (Updated): *CD4 testing is recommended as the preferred method to identify advanced HIV disease in people living with HIV.*
+          - **HIV.TRT.2025.008.02** (Updated): *In settings where CD4 testing is not yet available, WHO clinical staging can be used to identify advanced HIV disease in people living with HIV.*
+
+          ## Changes Required
+
+          ### \`WHO-UCN-HHS-SIA-2023.27-eng.xlsx\` — Sheet: \`HIV.D Care-Treatment\`
+          - **CONFIRM/UPDATE** *CD4 count* linkage to reference new AHD identification decision ID
+          - **CONFIRM/UPDATE** *WHO clinical stage* linkage to AHD identification decision as fallback
+          - **CONFIRM/ADD** *AHD identified* (Boolean) — output flag of AHD identification decision
+
+          ### \`WHO-UCN-HHS-SIA-2023.28-eng.xlsx\` — Sheet: \`HIV.D12.DT Det Screenings\`
+          - **ADD** AHD identification rules:
+            - Rule 1: IF CD4 count available AND CD4<200 cells/mm³ → AHD identified=True → trigger AHD management package (preferred)
+            - Rule 2 (fallback): IF CD4 count NOT available AND WHO clinical stage=3 or 4 → AHD identified=True → trigger AHD management
+          - **ADD** guidance: *CD4 is preferred for AHD identification. Use WHO staging only where CD4 unavailable.*
+
+          ### \`WHO-UCN-HHS-SIA-2023.28-eng.xlsx\` — Sheet: \`HIV.S.2 Monitoring ART response\`
+          - **CONFIRM/ADD** baseline CD4 test schedule at HIV diagnosis/ART initiation annotated as preferred AHD identification method
+
+          ## Rationale
+          Updated 2025 to explicitly prefer CD4-based AHD identification and provide clear fallback guidance for resource-limited settings.
+
+          ---
+          _This issue was auto-generated by the DAK GitHub Updater skill._
+
+          @copilot — please implement this change and open a pull request." 2>/dev/null || echo "Issue 11 creation attempted"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Issue 12 - Kaposis Sarcoma chemo options
+        if: steps.check.outputs.existing_count == '0'
+        run: |
+          gh issue create \
+            --repo ${{ github.repository }} \
+            --title "[DAK Update] Add Kaposi's Sarcoma chemotherapy options: paclitaxel or PLD (HIV.TRT.2025.009.01)" \
+            --label "dak-update,annex-a-data-dictionary,annex-b-decision-logic,treatment,kaposis-sarcoma" \
+            --assignee "copilot" \
+            --body "## Summary
+          WHO suggests paclitaxel or pegylated liposomal doxorubicin (PLD) for pharmacological treatment of Kaposi's Sarcoma in PLHIV (HIV.TRT.2025.009.01).
+
+          ## Source Recommendation
+          - **Recommendation ID:** HIV.TRT.2025.009.01 | **Type:** Updated | **Topic Area:** Treatment
+          - **Text:** *WHO suggests paclitaxel or pegylated liposomal doxorubicin for the pharmacological treatment of Kaposi's Sarcoma in people with HIV.*
+
+          ## Changes Required
+
+          ### \`WHO-UCN-HHS-SIA-2023.27-eng.xlsx\` — Sheet: \`HIV.D Care-Treatment\`
+          - **ADD** *Kaposi's Sarcoma (KS) diagnosed* (Boolean)
+          - **ADD** *KS staging* (Coding: Good risk T0; Poor risk T1)
+          - **ADD** *Planned KS chemotherapy regimen* (Coding: Paclitaxel; Pegylated liposomal doxorubicin (PLD); Other)
+          - **ADD** *KS oncology referral* (Boolean: True=referred for oncology coordination)
+
+          ### \`WHO-UCN-HHS-SIA-2023.28-eng.xlsx\` — Sheet: \`HIV.D12.DT Det Screenings\` (or new dedicated sheet)
+          - **ADD** KS management rule: IF KS diagnosed=True → ServiceRequest: Refer to oncology + MedicationRequest: Paclitaxel OR PLD (per availability); Hit policy F (First)
+          - **ADD** guidance: *Paclitaxel or PLD are recommended KS chemo options in PLHIV. Coordinate with oncology. Ensure continued ART during KS treatment.*
+
+          ## Rationale
+          Updated 2025 to provide structured clinical decision support for KS management with specific agent recommendations.
+
+          ---
+          _This issue was auto-generated by the DAK GitHub Updater skill._
+
+          @copilot — please implement this change and open a pull request." 2>/dev/null || echo "Issue 12 creation attempted"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Issue 13 - TPT 3HP preferred
+        if: steps.check.outputs.existing_count == '0'
+        run: |
+          gh issue create \
+            --repo ${{ github.repository }} \
+            --title "[DAK Update] Add TB Preventive Therapy decision logic: 3HP preferred, alternatives defined (HIV.TBH.2025.001.01)" \
+            --label "dak-update,annex-a-data-dictionary,annex-b-decision-logic,tb-hiv,tpt" \
+            --assignee "copilot" \
+            --body "## Summary
+          3HP (Rifapentine + INH, 3 months) is the preferred TPT regimen for HIV+ adults/adolescents; alternatives include 6H, 9H, 3HR, 1HP, 4R, 6Lfx (HIV.TBH.2025.001.01).
+
+          ## Source Recommendation
+          - **Recommendation ID:** HIV.TBH.2025.001.01 | **Type:** New | **Topic Area:** TB/HIV
+          - **Text:** *In adults and adolescents with HIV eligible for TB Preventive Therapy, 3 months of Rifapentine and isoniazid (3HP) is the preferred regimen, with alternatives 6H/9H; in special cases 3HR, 1HP, 4R, 6Lfx.*
+
+          ## Changes Required
+
+          ### \`WHO-UCN-HHS-SIA-2023.27-eng.xlsx\` — Sheet: \`HIV.D HIV-TB\`
+          - **ADD** *Eligible for TPT* (Boolean)
+          - **ADD** *TPT contraindications present* (Boolean/Coding: DR-TB exposure; Drug interactions; Active TB)
+          - **ADD** *Chosen TPT regimen* (Coding: 3HP (preferred); 6H; 9H; 3HR; 1HP; 4R; 6Lfx)
+          - **ADD** *TPT start date* (Date)
+          - **ADD** *TPT completion date* (Date)
+          - **ADD** *TPT completion status* (Coding: Completed; Discontinued—adverse effects; Discontinued—other)
+
+          ### \`WHO-UCN-HHS-SIA-2023.28-eng.xlsx\` — Sheet: \`HIV.D12.DT Det Screenings\` (or new TPT sheet)
+          - **ADD** TPT regimen selection decision table (Hit policy R—rule order):
+            - Priority 1: IF eligible AND no contraindications AND rifapentine available → 3HP
+            - Priority 2: IF 3HP not feasible → 6H or 9H
+            - Priority 3: Special circumstances → 3HR, 1HP, 4R, or 6Lfx
+          - **ADD** regimen-specific counselling and monitoring guidance
+
+          ### \`WHO-UCN-HHS-SIA-2023.28-eng.xlsx\` — Sheet: \`HIV.S.1 Recommended Services\`
+          - **ADD** TPT schedule rows: initiation visit, monthly follow-up, completion check
+
+          ## Rationale
+          New 2025 recommendation. 3HP preferred due to shorter duration and comparable efficacy to longer TPT courses.
+
+          ---
+          _This issue was auto-generated by the DAK GitHub Updater skill._
+
+          @copilot — please implement this change and open a pull request." 2>/dev/null || echo "Issue 13 creation attempted"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Issue 14 - Transitional care hospital-to-outpatient
+        if: steps.check.outputs.existing_count == '0'
+        run: |
+          gh issue create \
+            --repo ${{ github.repository }} \
+            --title "[DAK Update] Add hospital-to-outpatient transitional care data elements and schedules (HIV.SRV.2025.001.02)" \
+            --label "dak-update,annex-a-data-dictionary,annex-b-decision-logic,service-delivery" \
+            --assignee "copilot" \
+            --body "## Summary
+          Hospitalized PLHIV should receive support for linkage to and engagement in outpatient care to reduce avoidable readmissions (HIV.SRV.2025.001.02).
+
+          ## Source Recommendation
+          - **Recommendation ID:** HIV.SRV.2025.001.02 | **Type:** Updated | **Topic Area:** Service Delivery
+          - **Text:** *Hospitalized people with HIV may receive support for linkage to and engagement in outpatient care and reduce avoidable re-admissions.*
+
+          ## Changes Required
+
+          ### \`WHO-UCN-HHS-SIA-2023.27-eng.xlsx\` — Sheet: \`HIV.D Care-Treatment\`
+          - **ADD** *Inpatient admission (HIV-related)* (Boolean)
+          - **ADD** *Pre-discharge goal set* (Boolean)
+          - **ADD** *Medication review completed* (Boolean)
+          - **ADD** *Transitional care plan created* (Boolean)
+          - **ADD** *Phone follow-up scheduled* (Boolean)
+          - **ADD** *Home visit scheduled* (Boolean)
+          - **ADD** *Peer support assigned* (Boolean)
+
+          ### \`WHO-UCN-HHS-SIA-2023.28-eng.xlsx\` — Sheet: \`HIV.S.1 Recommended Services\`
+          - **ADD** transitional care schedule rows (trigger=inpatient discharge for HIV+ client):
+            - Pre-discharge HIV care plan (before discharge)
+            - Post-discharge phone follow-up (discharge + 3 days)
+            - Post-discharge outpatient visit (discharge + 14 days)
+            - Home visit if missed outpatient visit (within 7 days of missed visit)
+
+          ## Rationale
+          Updated 2025 to support care continuity for hospitalized PLHIV, reducing readmissions and improving retention.
+
+          ---
+          _This issue was auto-generated by the DAK GitHub Updater skill._
+
+          @copilot — please implement this change and open a pull request." 2>/dev/null || echo "Issue 14 creation attempted"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Issue 15 - Adherence support interventions
+        if: steps.check.outputs.existing_count == '0'
+        run: |
+          gh issue create \
+            --repo ${{ github.repository }} \
+            --title "[DAK Update] Add adherence support intervention data elements and schedules (HIV.SRV.2025.002.02)" \
+            --label "dak-update,annex-a-data-dictionary,annex-b-decision-logic,service-delivery" \
+            --assignee "copilot" \
+            --body "## Summary
+          Adherence support interventions (counselling, SMS reminders, peer/lay support, education) should be provided to people on ART (HIV.SRV.2025.002.02).
+
+          ## Source Recommendation
+          - **Recommendation ID:** HIV.SRV.2025.002.02 | **Type:** Updated | **Topic Area:** Service Delivery
+          - **Text:** *Adherence support interventions should be provided to people on antiretroviral therapy (ART). The following interventions should be provided: counselling, SMS reminders, lay/peer support, patient education.*
+
+          ## Changes Required
+
+          ### \`WHO-UCN-HHS-SIA-2023.27-eng.xlsx\` — Sheet: \`HIV.D Care-Treatment\`
+          - **ADD** *Adherence support provided* (Coding multi-select: Counselling; SMS/digital reminder; Peer/lay support; Patient education; None)
+          - **ADD** *Adherence plan agreed* (Boolean)
+          - **ADD** *Adherence support date* (Date — most recent adherence support intervention)
+
+          ### \`WHO-UCN-HHS-SIA-2023.28-eng.xlsx\` — Sheet: \`HIV.S.2 Monitoring ART response\`
+          - **ADD** ART initiation adherence support row: trigger=ART start; action=counselling+plan+SMS setup+peer referral; completion=support documented
+          - **CONFIRM** routine visit adherence check is a completion criterion
+          - **ADD** elevated VL adherence intervention: trigger=VL≥threshold; action=enhanced counselling+peer support+home visit if needed
+
+          ## Rationale
+          Updated 2025 to formally encode adherence support as a scheduled, proactive structured intervention across the ART care pathway.
+
+          ---
+          _This issue was auto-generated by the DAK GitHub Updater skill._
+
+          @copilot — please implement this change and open a pull request." 2>/dev/null || echo "Issue 15 creation attempted"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Issue 16 - Diabetes and hypertension integration
+        if: steps.check.outputs.existing_count == '0'
+        run: |
+          gh issue create \
+            --repo ${{ github.repository }} \
+            --title "[DAK Update] Integrate diabetes and hypertension care data elements and screening logic (HIV_DIA_HTN.SRV.2025.003.02)" \
+            --label "dak-update,annex-a-data-dictionary,annex-b-decision-logic,service-delivery,ncd-integration" \
+            --assignee "copilot" \
+            --body "## Summary
+          Diabetes and hypertension care should be integrated with HIV services (HIV_DIA_HTN.SRV.2025.003.02).
+
+          ## Source Recommendation
+          - **Recommendation ID:** HIV_DIA_HTN.SRV.2025.003.02 | **Type:** Updated | **Topic Area:** Service Delivery
+          - **Text:** *Diabetes and hypertension care should be integrated with HIV services.*
+
+          ## Changes Required
+
+          ### \`WHO-UCN-HHS-SIA-2023.27-eng.xlsx\` — Sheet: \`HIV.D Care-Treatment\`
+          - **ADD** *Blood pressure (systolic)* (Quantity mmHg)
+          - **ADD** *Blood pressure (diastolic)* (Quantity mmHg)
+          - **ADD** *Hypertension diagnosis* (Boolean)
+          - **ADD** *Diabetes screening result* (Coding: Normal; Pre-diabetic; Diabetic; Not done)
+          - **ADD** *Fasting blood glucose (FBG)* (Quantity mmol/L)
+          - **ADD** *HbA1c* (Quantity %)
+          - **ADD** *Diabetes diagnosis* (Boolean)
+          - **ADD** *NCD referral provided* (Boolean)
+          - **ADD** *NCD treatment started* (Boolean)
+
+          ### \`WHO-UCN-HHS-SIA-2023.28-eng.xlsx\` — Sheet: \`HIV.D12.DT Det Screenings\`
+          - **ADD** BP screening rule: Schedule BP at every HIV visit; IF BP≥140/90 → flag HTN; output referral if uncontrolled
+          - **ADD** Diabetes screening rule: FBG or HbA1c annually; IF FBG≥7.0 or HbA1c≥6.5% → flag diabetes; output referral
+
+          ### \`WHO-UCN-HHS-SIA-2023.28-eng.xlsx\` — Sheet: \`HIV.S.1 Recommended Services\`
+          - **ADD** BP measurement (every routine visit)
+          - **ADD** Diabetes screening (annual: FBG or HbA1c)
+          - **ADD** NCD management follow-up (after referral)
+
+          ## Rationale
+          Updated 2025. PLHIV have elevated NCD risk; integrated care improves outcomes through single-visit management.
+
+          ---
+          _This issue was auto-generated by the DAK GitHub Updater skill._
+
+          @copilot — please implement this change and open a pull request." 2>/dev/null || echo "Issue 16 creation attempted"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Issue 17 - Mental health integration
+        if: steps.check.outputs.existing_count == '0'
+        run: |
+          gh issue create \
+            --repo ${{ github.repository }} \
+            --title "[DAK Update] Integrate mental health care (depression, anxiety, alcohol use) with HIV services (HIV_MNH.SRV.2025.004.02)" \
+            --label "dak-update,annex-a-data-dictionary,annex-b-decision-logic,service-delivery,mental-health" \
+            --assignee "copilot" \
+            --body "## Summary
+          Mental health care for depression, anxiety, and alcohol use disorders should be integrated with HIV services (HIV_MNH.SRV.2025.004.02).
+
+          ## Source Recommendation
+          - **Recommendation ID:** HIV_MNH.SRV.2025.004.02 | **Type:** Updated | **Topic Area:** Service Delivery
+          - **Text:** *Mental health care for depression, anxiety, and alcohol use disorders should be integrated with HIV services.*
+
+          ## Changes Required
+
+          ### \`WHO-UCN-HHS-SIA-2023.27-eng.xlsx\` — Sheet: \`HIV.D Care-Treatment\`
+          - **ADD** *PHQ-9 score* (Quantity integer 0-27, depression screening)
+          - **ADD** *GAD-7 score* (Quantity integer 0-21, anxiety screening)
+          - **ADD** *AUDIT-C score* (Quantity integer 0-12, alcohol use screening)
+          - **ADD** *Depression diagnosis* (Boolean)
+          - **ADD** *Anxiety diagnosis* (Boolean)
+          - **ADD** *Alcohol use disorder diagnosis* (Boolean)
+          - **ADD** *Mental health referral provided* (Boolean)
+          - **ADD** *Mental health treatment started* (Boolean)
+
+          ### \`WHO-UCN-HHS-SIA-2023.28-eng.xlsx\` — Sheet: \`HIV.D12.DT Det Screenings\`
+          - **ADD** Depression screening: PHQ-9 at ART initiation + annually; IF PHQ-9≥10 → flag; output referral/management
+          - **ADD** Anxiety screening: GAD-7 annually; IF GAD-7≥10 → flag; output referral
+          - **ADD** Alcohol use screening: AUDIT-C annually; IF AUDIT-C≥3(women)/4(men) → flag; output brief intervention/referral
+
+          ### \`WHO-UCN-HHS-SIA-2023.28-eng.xlsx\` — Sheet: \`HIV.S.1 Recommended Services\`
+          - **ADD** MH screening—PHQ-9 (at ART initiation + annual)
+          - **ADD** MH screening—GAD-7 (annual)
+          - **ADD** MH screening—AUDIT-C (annual)
+          - **ADD** MH referral follow-up (after referral)
+
+          ## Rationale
+          Updated 2025. High prevalence of MH conditions among PLHIV; integrated MH care within HIV services improves overall outcomes.
+
+          ---
+          _This issue was auto-generated by the DAK GitHub Updater skill._
+
+          @copilot — please implement this change and open a pull request." 2>/dev/null || echo "Issue 17 creation attempted"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Report results
+        if: always()
+        run: |
+          echo "DAK issue creation workflow completed"
+          TOTAL=$(gh issue list --repo ${{ github.repository }} --label "dak-update" --json number --jq length)
+          echo "Total dak-update issues in repo: $TOTAL"
+          gh issue list --repo ${{ github.repository }} --label "dak-update" --json number,title --jq '.[] | "#\(.number): \(.title)"'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
