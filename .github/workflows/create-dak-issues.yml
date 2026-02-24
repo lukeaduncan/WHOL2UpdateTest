@@ -1,0 +1,35 @@
+name: Create DAK Update Issues
+
+on:
+  push:
+    branches:
+      - copilot/run-dak-updater
+    paths:
+      - '.github/scripts/create_dak_issues.py'
+      - 'HIV recs to test_v1.xlsx'
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  create-issues:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install pandas openpyxl requests
+
+      - name: Create DAK update issues
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: python .github/scripts/create_dak_issues.py
