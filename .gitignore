@@ -1,1 +1,3 @@
 dak-issues-results.json
+__pycache__/
+*.pyc
